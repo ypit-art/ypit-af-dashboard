@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f4f5;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --muted: #71717a;
+  --accent: #0d9488;
+  --accent-hover: #0f766e;
+  --ring-focus: rgba(13, 148, 136, 0.45);
 }
 
 @theme inline {
@@ -14,13 +19,57 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #09090b;
+    --foreground: #fafafa;
+    --card: #18181b;
+    --muted: #a1a1aa;
+    --accent: #2dd4bf;
+    --accent-hover: #5eead4;
+    --ring-focus: rgba(45, 212, 191, 0.35);
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.35),
+    transparent
+  );
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .skeleton-shimmer::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.06),
+      transparent
+    );
+  }
 }
