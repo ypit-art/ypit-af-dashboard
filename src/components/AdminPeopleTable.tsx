@@ -82,10 +82,36 @@ function LoadingSkeleton() {
   );
 }
 
+type ListMeta = {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  rangeStart: number;
+  rangeEnd: number;
+};
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
 export function AdminPeopleTable() {
   const [rows, setRows] = useState<RegistrationRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [meta, setMeta] = useState<ListMeta>({
+    page: 1,
+    pageSize: 25,
+    totalCount: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+    rangeStart: 0,
+    rangeEnd: 0,
+  });
   const [sorting, setSorting] = useState<SortingState>([
     { id: "name", desc: false },
   ]);
@@ -96,13 +122,26 @@ export function AdminPeopleTable() {
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/registrations", {
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(pageSize),
+        });
+        const res = await fetch(`/api/registrations?${params}`, {
           credentials: "include",
         });
         const json = (await res.json().catch(() => ({}))) as {
           error?: string;
           rows?: RegistrationRow[];
+          page?: number;
+          pageSize?: number;
+          totalCount?: number;
+          totalPages?: number;
+          hasNextPage?: boolean;
+          hasPreviousPage?: boolean;
+          rangeStart?: number;
+          rangeEnd?: number;
         };
 
         if (!res.ok) {
@@ -112,6 +151,20 @@ export function AdminPeopleTable() {
         if (!cancelled) {
           setRows(json.rows ?? []);
           setError(null);
+          if (typeof json.page === "number" && json.page !== page) {
+            setPage(json.page);
+          }
+          setMeta({
+            page: json.page ?? page,
+            pageSize: json.pageSize ?? pageSize,
+            totalCount: json.totalCount ?? 0,
+            totalPages: json.totalPages ?? 1,
+            hasNextPage: Boolean(json.hasNextPage),
+            hasPreviousPage: Boolean(json.hasPreviousPage),
+            rangeStart: json.rangeStart ?? 0,
+            rangeEnd: json.rangeEnd ?? 0,
+          });
+          setHasLoadedOnce(true);
         }
       } catch (e) {
         if (!cancelled) {
@@ -129,7 +182,7 @@ export function AdminPeopleTable() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [page, pageSize]);
 
   const safeRows = rows ?? [];
 
@@ -183,7 +236,7 @@ export function AdminPeopleTable() {
     setDialogOpen(true);
   }
 
-  if (loading) {
+  if (loading && !hasLoadedOnce) {
     return <LoadingSkeleton />;
   }
 
@@ -221,6 +274,8 @@ export function AdminPeopleTable() {
     );
   }
 
+  const showTableLoading = loading && hasLoadedOnce;
+
   return (
     <>
       <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/95 shadow-xl shadow-zinc-200/50 ring-1 ring-zinc-200/50 backdrop-blur-sm dark:border-zinc-800/90 dark:bg-zinc-950/95 dark:shadow-black/40 dark:ring-zinc-800/60">
@@ -231,17 +286,16 @@ export function AdminPeopleTable() {
             </span>
             <div>
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                {safeRows.length === 0
+                {meta.totalCount === 0
                   ? "No registrations yet"
-                  : `${safeRows.length} registration${safeRows.length === 1 ? "" : "s"}`}
+                  : `${meta.totalCount} registration${meta.totalCount === 1 ? "" : "s"}`}
               </p>
               <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-500">
-                Sort columns with the headers. Select a row to view every
-                field.
+                Sort columns within this page. Open a row for the full record.
               </p>
             </div>
           </div>
-          {safeRows.length > 0 ? (
+          {meta.totalCount > 0 ? (
             <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-teal-200/80 bg-teal-50/90 px-2.5 py-1 text-[11px] font-medium text-teal-900 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-200">
               <span
                 className="h-1.5 w-1.5 rounded-full bg-teal-500"
@@ -252,7 +306,7 @@ export function AdminPeopleTable() {
           ) : null}
         </div>
 
-        {safeRows.length === 0 ? (
+        {meta.totalCount === 0 && hasLoadedOnce ? (
           <div className="flex flex-col items-center px-6 py-16 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-500">
               <TableIcon className="h-7 w-7" />
@@ -265,8 +319,18 @@ export function AdminPeopleTable() {
               Check Supabase when you expect records here.
             </p>
           </div>
-        ) : (
-          <div className="max-w-full overflow-x-auto">
+        ) : meta.totalCount > 0 ? (
+          <div
+            className={`relative max-w-full overflow-x-auto ${showTableLoading ? "opacity-60" : ""}`}
+            aria-busy={showTableLoading}
+          >
+            {showTableLoading ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50 dark:bg-zinc-950/50">
+                <span className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+                  Loading…
+                </span>
+              </div>
+            ) : null}
             <table className="w-full min-w-[400px] border-collapse text-left text-sm">
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -347,7 +411,66 @@ export function AdminPeopleTable() {
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
+
+        {meta.totalCount > 0 ? (
+          <div className="flex flex-col gap-3 border-t border-zinc-100 bg-zinc-50/80 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900/40 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              Showing{" "}
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {meta.rangeStart}–{meta.rangeEnd}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {meta.totalCount}
+              </span>
+              <span className="text-zinc-400 dark:text-zinc-600"> · </span>
+              Page{" "}
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {meta.page}
+              </span>{" "}
+              of {meta.totalPages}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Per page
+                <select
+                  value={pageSize}
+                  disabled={loading}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="cursor-pointer rounded-lg border border-zinc-300 bg-white py-1.5 pr-8 pl-2 text-xs font-medium text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700">
+                <button
+                  type="button"
+                  disabled={!meta.hasPreviousPage || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="border-r border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={!meta.hasNextPage || loading}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <Dialog.Root

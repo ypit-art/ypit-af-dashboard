@@ -38,8 +38,8 @@ Open [http://localhost:3000](http://localhost:3000). The browser will prompt for
 ## Data
 
 - **Table**: `registrations`
-- **Limit**: up to 2000 rows per request (see [`src/app/api/registrations/route.ts`](src/app/api/registrations/route.ts)).
-- Ordering tries `id` ascending, then `created_at` descending, then unordered if those columns are missing.
+- **Pagination**: `GET /api/registrations?page=1&pageSize=25` — default page size 25, max 100 per page. Response includes `totalCount`, `totalPages`, and `rangeStart` / `rangeEnd` for the footer UI.
+- Ordering tries `id` ascending, then `created_at` descending, then unordered if those columns are missing. Column sorting in the table applies **only to the current page** of data.
 
 If your table name differs, change the `.from('registrations')` call in the API route.
 
