@@ -11,6 +11,10 @@ import {
 } from "@tanstack/react-table";
 import { useEffect, useMemo, useState } from "react";
 import {
+  maskEmailForPrivacy,
+  shouldMaskEmailField,
+} from "@/lib/maskEmail";
+import {
   getDisplayEmail,
   getDisplayName,
   registrationDetailEntries,
@@ -27,6 +31,15 @@ function formatCell(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+function formatDetailValue(key: string, value: unknown): string {
+  const raw = formatCell(value);
+  if (raw === "—") return raw;
+  if (shouldMaskEmailField(key)) {
+    return maskEmailForPrivacy(raw);
+  }
+  return raw;
 }
 
 const columnHelper = createColumnHelper<RegistrationRow>();
@@ -136,11 +149,14 @@ export function AdminPeopleTable() {
         id: "email",
         header: "Email",
         sortingFn: "alphanumeric",
-        cell: (info) => (
-          <span className="text-zinc-600 dark:text-zinc-400">
-            {String(info.getValue())}
-          </span>
-        ),
+        cell: (info) => {
+          const raw = String(info.getValue());
+          return (
+            <span className="text-zinc-600 tracking-wide dark:text-zinc-400">
+              {maskEmailForPrivacy(raw)}
+            </span>
+          );
+        },
       }),
     ],
     [],
@@ -307,18 +323,25 @@ export function AdminPeopleTable() {
                       }
                     }}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td
-                        key={cell.id}
-                        className="max-w-[min(100vw,420px)] truncate px-5 py-3.5 leading-snug"
-                        title={String(cell.getValue())}
-                      >
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </td>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const raw = String(cell.getValue());
+                      const title =
+                        cell.column.id === "email"
+                          ? maskEmailForPrivacy(raw)
+                          : raw;
+                      return (
+                        <td
+                          key={cell.id}
+                          className="max-w-[min(100vw,420px)] truncate px-5 py-3.5 leading-snug"
+                          title={title}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -375,8 +398,8 @@ export function AdminPeopleTable() {
                       <dt className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-500">
                         {formatColumnLabel(key)}
                       </dt>
-                      <dd className="font-mono text-sm break-words text-zinc-900 tabular-nums dark:text-zinc-200">
-                        {formatCell(value)}
+                      <dd className="font-mono text-sm break-words text-zinc-900 tracking-wide tabular-nums dark:text-zinc-200">
+                        {formatDetailValue(key, value)}
                       </dd>
                     </div>
                   ))}
