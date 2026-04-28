@@ -95,7 +95,58 @@ type ListMeta = {
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
-export function AdminPeopleTable() {
+export type AdminDataset = "registrations" | "conferenceWaitlist";
+
+const DATASET_UI: Record<
+  AdminDataset,
+  {
+    apiPrefix: string;
+    loadFail: string;
+    headlineNone: string;
+    headlineMany: (n: number) => string;
+    emptyBody: string;
+    emptyHint: string;
+    detailTitle: string;
+    detailSr: string;
+    fallbackFile: { csv: string; xlsx: string };
+  }
+> = {
+  registrations: {
+    apiPrefix: "/api/registrations",
+    loadFail: "Failed to load registrations",
+    headlineNone: "No registrations yet",
+    headlineMany: (n) =>
+      `${n} registration${n === 1 ? "" : "s"}`,
+    emptyBody: "No rows to show",
+    emptyHint:
+      "The registrations table is empty, or data could not be loaded. Check Supabase when you expect records here.",
+    detailTitle: "Registration details",
+    detailSr: "All fields for the selected registration",
+    fallbackFile: {
+      csv: "registrations-export.csv",
+      xlsx: "registrations-export.xlsx",
+    },
+  },
+  conferenceWaitlist: {
+    apiPrefix: "/api/conference_waitlist",
+    loadFail: "Failed to load conference waitlist",
+    headlineNone: "No conference waitlist entries yet",
+    headlineMany: (n) =>
+      `${n} waitlist entr${n === 1 ? "y" : "ies"}`,
+    emptyBody: "No waitlist entries to show",
+    emptyHint:
+      "The conference waitlist table is empty, or data could not be loaded. Check Supabase when you expect records here.",
+    detailTitle: "Waitlist entry details",
+    detailSr: "All fields for the selected waitlist entry",
+    fallbackFile: {
+      csv: "conference-waitlist-export.csv",
+      xlsx: "conference-waitlist-export.xlsx",
+    },
+  },
+};
+
+export function AdminPeopleTable({ dataset }: { dataset: AdminDataset }) {
+  const copy = DATASET_UI[dataset];
   const [rows, setRows] = useState<RegistrationRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,6 +168,8 @@ export function AdminPeopleTable() {
   ]);
   const [selected, setSelected] = useState<RegistrationRow | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,7 +181,7 @@ export function AdminPeopleTable() {
           page: String(page),
           pageSize: String(pageSize),
         });
-        const res = await fetch(`/api/registrations?${params}`, {
+        const res = await fetch(`${copy.apiPrefix}?${params}`, {
           credentials: "include",
         });
         const json = (await res.json().catch(() => ({}))) as {
@@ -169,7 +222,7 @@ export function AdminPeopleTable() {
       } catch (e) {
         if (!cancelled) {
           setError(
-            e instanceof Error ? e.message : "Failed to load registrations",
+            e instanceof Error ? e.message : copy.loadFail,
           );
           setRows(null);
         }
@@ -182,7 +235,7 @@ export function AdminPeopleTable() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize]);
+  }, [page, pageSize, copy]);
 
   const safeRows = rows ?? [];
 
@@ -236,6 +289,54 @@ export function AdminPeopleTable() {
     setDialogOpen(true);
   }
 
+  async function downloadExport(kind: "xlsx" | "csv") {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await fetch(
+        `${copy.apiPrefix}/export?format=${kind}`,
+        {
+          credentials: "include",
+        },
+      );
+
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          payload.error ?? (res.statusText || "Export failed"),
+        );
+      }
+
+      const blob = await res.blob();
+      let filename =
+        kind === "csv"
+          ? copy.fallbackFile.csv
+          : copy.fallbackFile.xlsx;
+      const cd = res.headers.get("Content-Disposition");
+      const quoted = cd?.match(/filename="([^"]+)"/)?.[1];
+      const fallback = cd?.match(/filename=([^;]+)/)?.[1]?.trim();
+      if (quoted) filename = quoted;
+      else if (fallback) filename = fallback.replace(/^UTF-8''/, "");
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(
+        e instanceof Error ? e.message : "Could not download export",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (loading && !hasLoadedOnce) {
     return <LoadingSkeleton />;
   }
@@ -287,8 +388,8 @@ export function AdminPeopleTable() {
             <div>
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 {meta.totalCount === 0
-                  ? "No registrations yet"
-                  : `${meta.totalCount} registration${meta.totalCount === 1 ? "" : "s"}`}
+                  ? copy.headlineNone
+                  : copy.headlineMany(meta.totalCount)}
               </p>
               <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-500">
                 Sort columns within this page. Open a row for the full record.
@@ -296,13 +397,67 @@ export function AdminPeopleTable() {
             </div>
           </div>
           {meta.totalCount > 0 ? (
-            <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-teal-200/80 bg-teal-50/90 px-2.5 py-1 text-[11px] font-medium text-teal-900 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-200">
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-teal-500"
-                aria-hidden
-              />
-              Tap row for details
-            </span>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={exporting || loading}
+                  onClick={() => void downloadExport("xlsx")}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs font-semibold text-teal-900 shadow-sm transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-100 dark:hover:bg-teal-900/70"
+                >
+                  <svg
+                    className="h-4 w-4 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M12 15v6M8 21h8M4 21h-.6a2 2 0 0 1-2-2v-1.4c0-.3 0-.5.2-.8l11-11c.4-.4 1-.4 1.4 0l3.6 3.6c.4.4.4 1 0 1.4L7.4 21.4c-.2.3-.6.6-1 .6z" />
+                    <path d="m3 21 9-9" />
+                    <path d="M14.5 4.5 16 6" />
+                  </svg>
+                  {exporting ? "Exporting…" : "Export Excel"}
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting || loading}
+                  onClick={() => void downloadExport("csv")}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  <svg
+                    className="h-4 w-4 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                    <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" />
+                    <path d="M12 11v6" />
+                    <path d="m9 14 3 3 3-3" />
+                  </svg>
+                  {exporting ? "Exporting…" : "Export CSV"}
+                </button>
+              </div>
+              {exportError ? (
+                <p className="max-w-[min(280px,100vw)] text-right text-xs text-red-600 dark:text-red-400">
+                  {exportError}
+                </p>
+              ) : null}
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200/80 bg-teal-50/90 px-2.5 py-1 text-[11px] font-medium text-teal-900 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-200">
+                <span
+                  className="h-1.5 w-1.5 rounded-full bg-teal-500"
+                  aria-hidden
+                />
+                Tap row for details
+              </span>
+            </div>
           ) : null}
         </div>
 
@@ -312,11 +467,10 @@ export function AdminPeopleTable() {
               <TableIcon className="h-7 w-7" />
             </div>
             <p className="mt-4 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              No rows to show
+              {copy.emptyBody}
             </p>
             <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-500">
-              The registrations table is empty, or data could not be loaded.
-              Check Supabase when you expect records here.
+              {copy.emptyHint}
             </p>
           </div>
         ) : meta.totalCount > 0 ? (
@@ -503,10 +657,10 @@ export function AdminPeopleTable() {
                 </svg>
               </Dialog.Close>
               <Dialog.Title className="pr-10 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                Registration details
+                {copy.detailTitle}
               </Dialog.Title>
               <Dialog.Description className="sr-only">
-                All fields for the selected registration
+                {copy.detailSr}
               </Dialog.Description>
             </div>
 

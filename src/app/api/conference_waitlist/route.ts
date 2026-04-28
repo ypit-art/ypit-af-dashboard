@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_TABLE_REGISTRATIONS } from "@/lib/adminTables";
+import { ADMIN_TABLE_CONFERENCE_WAITLIST } from "@/lib/adminTables";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { queryTablePage } from "@/lib/supabasePagedTable";
 
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     const first = await queryTablePage(
       supabase,
-      ADMIN_TABLE_REGISTRATIONS,
+      ADMIN_TABLE_CONFERENCE_WAITLIST,
       rangeFrom,
       rangeTo,
     );
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       rangeTo = rangeFrom + pageSize - 1;
       const retry = await queryTablePage(
         supabase,
-        ADMIN_TABLE_REGISTRATIONS,
+        ADMIN_TABLE_CONFERENCE_WAITLIST,
         rangeFrom,
         rangeTo,
       );

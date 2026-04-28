@@ -1,6 +1,6 @@
 # YPIT AF — Registrations admin dashboard
 
-Read-only Next.js admin UI that lists rows from the Supabase Postgres table `registrations`, protected by HTTP Basic Auth. The **service role** key is only used on the server (API route); it is never exposed to the browser.
+Read-only Next.js admin UI for Supabase tables **`registrations`** and **`conference_waitlist`** (two tabs on the home page), protected by HTTP Basic Auth. The **service role** key is only used on the server; it is never exposed to the browser.
 
 ## Security
 
@@ -37,11 +37,10 @@ Open [http://localhost:3000](http://localhost:3000). The browser will prompt for
 
 ## Data
 
-- **Table**: `registrations`
-- **Pagination**: `GET /api/registrations?page=1&pageSize=25` — default page size 25, max 100 per page. Response includes `totalCount`, `totalPages`, and `rangeStart` / `rangeEnd` for the footer UI.
-- Ordering tries `id` ascending, then `created_at` descending, then unordered if those columns are missing. Column sorting in the table applies **only to the current page** of data.
-
-If your table name differs, change the `.from('registrations')` call in the API route.
+- **Tables**: `registrations` and **`conference_waitlist`**. Postgres names are defined in [`src/lib/adminTables.ts`](src/lib/adminTables.ts) — rename there if yours differ (no spaces in identifiers; use underscores).
+- **Pagination**: `GET /api/registrations` and `GET /api/conference_waitlist` with `page` / `pageSize` — defaults 1 / 25, max **100** per page. Responses include totals and ranges for pagination UI.
+- **Export**: `GET /api/registrations/export` and `GET /api/conference_waitlist/export` — same `format=xlsx`|`csv`. Columns **Name** and **Email**; emails **not** masked. Up to **10k** rows per export.
+- Ordering tries `id` ascending, then `created_at` descending, then unordered if those columns are missing. Sorting via table headers applies **only to the current page** of rows.
 
 ## Scripts
 

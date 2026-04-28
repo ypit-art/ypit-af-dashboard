@@ -47,5 +47,11 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/api/registrations"],
+  matcher: [
+    "/",
+    "/api/registrations",
+    "/api/registrations/:path*",
+    "/api/conference_waitlist",
+    "/api/conference_waitlist/:path*",
+  ],
 };
